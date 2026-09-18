@@ -1,0 +1,34 @@
+# Vivado generated output and local state
+.Xil/
+*.cache/
+*.gen/
+*.hw/
+*.ip_user_files/
+*.runs/
+*.sim/
+
+# Vivado logs, journals, and temporary artifacts
+*.jou
+*.log
+*.str
+*.tmp
+*.wdb
+*.wcfg
+*.pb
+
+# Editor and operating-system metadata
+.vscode/
+.idea/
+*.swp
+*~
+Thumbs.db
+Desktop.ini
+
+# Keep project, HDL, constraints, Tcl, and source directories tracked.
+!*.xpr
+!*.tcl
+!*.v
+!*.sv
+!*.vhd
+!*.vhdl
+!*.xdc

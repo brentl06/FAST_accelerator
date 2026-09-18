@@ -1,0 +1,17 @@
+# Normalize source and project metadata while preserving native checkout endings.
+* text=auto
+*.v text
+*.sv text
+*.vh text
+*.svh text
+*.vhd text
+*.vhdl text
+*.xdc text
+*.tcl text
+*.xpr text
+
+# Common generated/binary FPGA artifacts.
+*.bit binary
+*.bin binary
+*.dcp binary
+*.wdb binary
