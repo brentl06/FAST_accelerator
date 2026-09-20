@@ -41,7 +41,7 @@ module sliding_window_tb;
         reset = 1'b0;
 
         // Send three complete rows. Data is driven before each rising edge.
-        for (row = 0; row < 3; row = row + 1) begin
+        for (row = 0; row < 480; row = row + 1) begin
             for (col = 0; col < 640; col = col + 1) begin
                 @(negedge clk);
                 pixel       = row + col;
