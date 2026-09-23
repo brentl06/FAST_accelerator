@@ -26,10 +26,10 @@ module sliding_window#(
     )
     (
     // input module declaration with inputs and outputs
-        clk, reset, pixel, pixel_valid, 
+        clk, reset, pixel, pixel_valid,
         w00, w01, w02, 
         w10, w11, w12, 
-        w20, w21, w22, window_valid    
+        w20, w21, w22, window_valid  
     );
     
     // IN & OUT
@@ -60,6 +60,7 @@ module sliding_window#(
     
     always @ (posedge clk) 
     begin: COL_ROW_COUNTER
+    
         if (reset) begin
             col <= 0;
             row <= 0;
@@ -96,7 +97,7 @@ module sliding_window#(
             {w_r2[0], w_r2[1], w_r2[2]} <= {w_r2[1], w_r2[2], pixel};
         end
         
-        window_valid <= (row >= 2) & (col >= 2) & pixel_valid;
+        window_valid <= (row >= 2) & (col >= 2) & pixel_valid & !reset;
     end
     
 endmodule
