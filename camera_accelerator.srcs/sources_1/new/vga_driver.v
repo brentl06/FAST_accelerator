@@ -21,52 +21,54 @@
 
 
 module vga_driver(
-         clk, reset, Red, Green, Blue, hsync, vsync
+         vga_clk, reset, pixel_in,
+         Red, Green, Blue, hsync, vsync,
+         rd_addr_x, rd_addr_y, read_en
     );
     
     // IN n OUTs
-    //input [7:0] pixel_in; // TODO: Add back in
-    input clk, reset;
+    input vga_clk, reset;
+    input [3:0] pixel_in;
     
-    output [7:0] Red, Green, Blue;
+    output [3:0] Red, Green, Blue;
     output hsync, vsync;
     
+    output [9:0] rd_addr_x;
+    output [8:0] rd_addr_y; 
+    output read_en;
+    
     // INTERNAL wires and regs
-    reg [3:0] div_clk;
-    wire vga_clk;
-    wire active_video;
     reg [9:0] h_counter;
     reg [9:0] v_counter;
-    wire [7:0] pixel_int; // check if only 4 bits?
+    
+    wire active_video_cur;
+    wire hsync_cur;
+    wire vsync_cur;
+    
+    reg active_video_delayed;
+    reg hsync_delayed;
+    reg vsync_delayed;
+    
+    wire [3:0] pixel_int;
+    
     parameter white = 255;
     parameter black = 0;
-    
-    // VGA CLOCK GEN
-    always @(posedge clk, posedge reset) 
-    begin: CLK_DIV 
-        if (reset) 
-            div_clk <= 0;
-        else 
-            div_clk <= div_clk + 1'b1;
-    end
-    
-    assign vga_clk = div_clk[1]; // 100 MHz / 2^2 = 25 MHz
-    
-    
+   
     // HSYNC & VSYNC Driver based on counter values
-    // TODO: make pixel pattern better
-    assign hsync = !((h_counter > 655) & (h_counter < 752)); // active low [656:751]
-    assign vsync = !((v_counter > 489) & (v_counter < 492)); // active low [490:491]
+    assign hsync_cur = !((h_counter > 655) & (h_counter < 752)); // active low [656:751]
     
-    assign active_video = (h_counter < 640) & (v_counter < 480);
-    assign pixel_int = (active_video) ? white : black;
+    assign vsync_cur = !((v_counter > 489) & (v_counter < 492)); // active low [490:491]
     
-    assign Red = pixel_int;
-    assign Green = pixel_int;
-    assign Blue = pixel_int;
+    assign active_video_cur = (h_counter < 640) & (v_counter < 480);
     
+    // addressing
+    assign rd_addr_x = active_video_cur ? h_counter : 0;
+    assign rd_addr_y = active_video_cur ? v_counter[8:0] : 0;
     
-    // Horizontal and Vertical Countera
+    assign read_en = active_video_cur;
+
+
+    // VGA Scan counter: 800 x 525 total
     always @(posedge vga_clk, posedge reset)
     begin: VGA_COUNTERS
         if (reset) begin
@@ -85,5 +87,33 @@ module vga_driver(
         else
             h_counter <= h_counter + 1;
     end
+    
+    
+    // delaying data 1 clock because of frame buffer read delay
+    always @(posedge vga_clk)
+    begin: DATA_DELAY
+        if (reset) begin
+            active_video_delayed <= 0;
+            hsync_delayed <= 1;
+            vsync_delayed <= 1;
+        end
+        else begin
+            active_video_delayed <= active_video_cur;
+            hsync_delayed <= hsync_cur;
+            vsync_delayed <= vsync_cur;
+        end
+    end
+    
+    
+    // Final assignments 
+    assign Red = active_video_delayed ? pixel_int : 0;
+    assign Green = active_video_delayed ? pixel_int : 0;
+    assign Blue = active_video_delayed ? pixel_int : 0;
+    
+    assign pixel_int = active_video_delayed ? pixel_in : 0;
+    
+    assign hsync = hsync_delayed;
+    assign vsync = vsync_delayed;
+    
     
 endmodule

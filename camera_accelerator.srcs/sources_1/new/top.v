@@ -45,7 +45,8 @@ module top(
     
     OV7670_interface camera_module(
         .pclk(pclk), .sysclk(clk), .href(href), .vsync(vsync),
-        .rst(reset), .data(data_in), .gray_pixel(pixel), .pixel_valid(pixel_valid)
+        .rst(reset), .data(data_in), .gray_pixel(pixel), 
+        .wr_address(), .pixel_valid(pixel_valid)
     );
     
     sliding_window #(.IMAGE_WIDTH(640), .IMAGE_HEIGHT(480))

@@ -21,11 +21,11 @@
 
 
 module sobel_filter #(
-      parameter [10:0] EDGE_THRESHOLD = 11'd300
+      parameter [10:0] EDGE_THRESHOLD = 300
     )
     ( clk, reset, window_valid,
       w00, w01, w02, w10, w11, w12, w20, w21, w22,
-      out_valid, edge_detected      
+      out_valid, edge_detected, wr_address     
     );
     
     // IN and OUTS
@@ -36,6 +36,7 @@ module sobel_filter #(
     
     output reg out_valid;
     output reg edge_detected;
+    output reg [18:0] wr_address;
     
     // Internal Regs and Wires
     reg signed [10:0] gx, gy;
@@ -82,9 +83,11 @@ module sobel_filter #(
         end
         else begin
             out_valid <= g_valid;
+            
             if (g_valid) begin
                 magnitude <= abs_gx + abs_gy;
                 edge_detected <= ((abs_gx + abs_gy) >= EDGE_THRESHOLD);
+                
             end
             else edge_detected <= 0;
         end
