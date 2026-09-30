@@ -32,7 +32,8 @@ module test_pipeline#(
     output reg [3:0] pixel_out,
     output reg [9:0] x,
     output reg [8:0] y,
-    output reg write_en
+    output reg write_en,
+    output reg frame_done
     );
     
     // Internal Regs and Wires
@@ -46,10 +47,12 @@ module test_pipeline#(
             x <= 0;
             y <= 0;
             write_en <= 0;
+            frame_done <= 0;
             x_int <= 0;
             y_int <= 0;
         end else begin
             write_en <= pixel_valid;
+            frame_done <= 0;
 
             if (pixel_valid) begin
                 pixel_out <= pixel_in[7:4];
@@ -75,6 +78,11 @@ module test_pipeline#(
                         x_int <= x_int + 1'b1;
                     end
                 end
+
+                if ((frame_start && (FRAME_WIDTH == 1) && (FRAME_HEIGHT == 1)) ||
+                    (!frame_start && (x_int == FRAME_WIDTH - 1) &&
+                     (y_int == FRAME_HEIGHT - 1)))
+                    frame_done <= 1;
             end
         end
     end

@@ -55,6 +55,18 @@ module frame_buffer#(
     
     (* ram_style = "block" *)
     reg [3:0] memory [0:FRAME_SIZE-1];
+    integer init_x;
+    integer init_y;
+
+    // Give the display deterministic black pixels before camera processing
+    // begins. In particular, the Sobel pipeline intentionally never writes the
+    // outer one-pixel border.
+    initial begin
+        for (init_y = 0; init_y < FRAME_HEIGHT; init_y = init_y + 1) begin
+            for (init_x = 0; init_x < FRAME_WIDTH; init_x = init_x + 1)
+                memory[(init_y * FRAME_WIDTH) + init_x] = 4'h0;
+        end
+    end
     
     assign valid_rd_addr = (read_x < FRAME_WIDTH) & (read_y < FRAME_HEIGHT);
     assign valid_wr_addr = (write_x < FRAME_WIDTH) & (write_y < FRAME_HEIGHT);

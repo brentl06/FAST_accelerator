@@ -90,12 +90,11 @@ module sobel_sliding_window_tb;
         .window_valid(window_valid)
     );
 
-    sobel_filter #(
-        .EDGE_THRESHOLD(11'd300)
-    ) sobel_dut (
+    sobel_filter sobel_dut (
         .clk(clk),
         .reset(reset),
         .window_valid(window_valid),
+        .edge_threshold(11'd300),
         .w00(w00), .w01(w01), .w02(w02),
         .w10(w10), .w11(w11), .w12(w12),
         .w20(w20), .w21(w21), .w22(w22),
@@ -118,12 +117,11 @@ module sobel_sliding_window_tb;
         .window_valid(window_valid_640)
     );
 
-    sobel_filter #(
-        .EDGE_THRESHOLD(11'd300)
-    ) sobel_dut_640 (
+    sobel_filter sobel_dut_640 (
         .clk(clk),
         .reset(reset_640),
         .window_valid(window_valid_640),
+        .edge_threshold(11'd300),
         .w00(w00_640), .w01(w01_640), .w02(w02_640),
         .w10(w10_640), .w11(w11_640), .w12(w12_640),
         .w20(w20_640), .w21(w21_640), .w22(w22_640),

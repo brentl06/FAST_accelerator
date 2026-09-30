@@ -1111,18 +1111,6 @@
 		(uuid 224c983c-9c76-4f5d-9e44-8e23c56aa231)
 	)
 	(rectangle
-		(start 72.898 106.934)
-		(end 97.028 132.334)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(fill
-			(type none)
-		)
-		(uuid 32f93c34-efe4-4aff-bf38-ba0284e6c5a7)
-	)
-	(rectangle
 		(start 171.45 41.91)
 		(end 189.23 74.93)
 		(stroke
@@ -1193,18 +1181,6 @@
 			)
 		)
 		(uuid "93d06513-2786-49ac-a84a-03ffba2c8e28")
-	)
-	(text "sliding_window"
-		(exclude_from_sim no)
-		(at 80.01 105.41 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-				(thickness 0.254)
-				(bold yes)
-			)
-		)
-		(uuid "9688b9a4-d9cf-4de5-9863-abdc1935f385")
 	)
 	(text "FIFO_IP"
 		(exclude_from_sim no)

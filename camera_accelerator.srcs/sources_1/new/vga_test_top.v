@@ -1,13 +1,21 @@
 `timescale 1ns / 1ps
 
 // Minimal OV7670-to-VGA pipeline for the Nexys A7.
-// The OV7670 must output 640x480 YUV422. SW0 selects which byte pair is stored:
-// 0 = bytes 2/4; 1 = bytes 1/3.
+// The OV7670 must output 640x480 YUV422. SW0 selects which byte pair is stored.
+// SW1 selects raw grayscale (0) or Sobel edges (1) at the next frame boundary.
+// SW15:SW12 select the Sobel threshold in increments of 25.
 module vga_test_top (
+    // Internal to FPGA Dev Board
     input  wire       CLK100MHZ,
     input  wire       CPU_RESETN,
     input  wire       SW0,
+    input  wire       SW1,
+    input  wire       SW12,
+    input  wire       SW13,
+    input  wire       SW14,
+    input  wire       SW15,
 
+    // Inputs/Outputs from Camera Module
     input  wire       CAM_PCLK,
     input  wire       CAM_HREF,
     input  wire       CAM_VSYNC,
@@ -15,11 +23,23 @@ module vga_test_top (
     output wire       CAM_XCLK,
     output wire       CAM_RESET,
 
+    // Outputs to Display
     output wire [3:0] VGA_R,
     output wire [3:0] VGA_G,
     output wire [3:0] VGA_B,
     output wire       VGA_HS,
-    output wire       VGA_VS
+    output wire       VGA_VS,
+
+    // Seven-segment status display
+    output wire       CA,
+    output wire       CB,
+    output wire       CC,
+    output wire       CD,
+    output wire       CE,
+    output wire       CF,
+    output wire       CG,
+    output wire       DP,
+    output wire [7:0] AN
 );
 
     wire reset;
@@ -81,32 +101,59 @@ module vga_test_top (
     wire [9:0] write_x;
     wire [8:0] write_y;
     wire write_en;
+    wire frame_done;
+    wire processing_mode;
+    wire mode_changed;
+    wire [10:0] active_threshold;
 
-    test_pipeline camera_write_pipeline (
+    runtime_pipeline_selector camera_write_pipeline (
         .pixel_in(camera_gray_pixel),
         .pixel_valid(camera_pixel_valid),
         .frame_start(camera_frame_start),
+        .mode_select(SW1),
+        .threshold_select({SW15, SW14, SW13, SW12}),
         .clk(CLK100MHZ),
         .reset(reset),
         .pixel_out(write_data),
         .x(write_x),
         .y(write_y),
-        .write_en(write_en)
+        .write_en(write_en),
+        .frame_done(frame_done),
+        .active_mode(processing_mode),
+        .mode_changed(mode_changed),
+        .active_threshold(active_threshold)
     );
 
-    // Do not scan uninitialized framebuffer memory. The last registered write
-    // of the first frame makes the display eligible to start.
+    wire [6:0] status_segments;
+
+    seven_segment_status status_display (
+        .clk(CLK100MHZ),
+        .reset(reset),
+        .processing_mode(processing_mode),
+        .threshold(active_threshold),
+        .segments(status_segments),
+        .decimal_point(DP),
+        .anodes(AN)
+    );
+
+    assign {CA, CB, CC, CD, CE, CF, CG} = status_segments;
+
+    // Keep VGA blanked until one complete frame from the selected mode has
+    // been stored. A mode change invalidates the frame currently on display.
     reg first_frame_complete;
     always @(posedge CLK100MHZ or posedge reset) begin
         if (reset)
             first_frame_complete <= 0;
-        else if (write_en && (write_x == 639) && (write_y == 479))
+        else if (mode_changed)
+            first_frame_complete <= 0;
+        else if (frame_done)
             first_frame_complete <= 1;
     end
 
-    reg [1:0] frame_complete_sync;
+    (* ASYNC_REG = "TRUE" *) reg [1:0] frame_complete_sync;
     wire vga_reset;
 
+    // Delays first_frame_complete
     always @(posedge vga_clk or posedge reset) begin
         if (reset)
             frame_complete_sync <= 0;
@@ -119,7 +166,10 @@ module vga_test_top (
     wire [9:0] read_x;
     wire [8:0] read_y;
     wire read_en;
-    wire [3:0] pixel_data;
+    wire [3:0] framebuffer_pixel;
+    wire [3:0] display_pixel;
+    (* ASYNC_REG = "TRUE" *) reg [1:0] processing_mode_sync;
+    reg        processed_border_delayed;
 
     frame_buffer framebuffer (
         .write_clk(CLK100MHZ),
@@ -131,14 +181,31 @@ module vga_test_top (
         .read_x(read_x),
         .read_y(read_y),
         .read_en(read_en),
-        .data_out(pixel_data),
+        .data_out(framebuffer_pixel),
         .reset(reset)
     );
+
+    // Synchronize the selected mode into the VGA clock domain. The border
+    // decision is registered to match the framebuffer's one-clock read delay.
+    // This prevents stale raw pixels from appearing around a Sobel frame.
+    always @(posedge vga_clk or posedge reset) begin
+        if (reset) begin
+            processing_mode_sync <= 2'b00;
+            processed_border_delayed <= 1'b0;
+        end else begin
+            processing_mode_sync <= {processing_mode_sync[0], processing_mode};
+            processed_border_delayed <= processing_mode_sync[1] && read_en &&
+                                        ((read_x == 0) || (read_x == 639) ||
+                                         (read_y == 0) || (read_y == 479));
+        end
+    end
+
+    assign display_pixel = processed_border_delayed ? 4'h0 : framebuffer_pixel;
 
     vga_driver driver (
         .vga_clk(vga_clk),
         .reset(vga_reset),
-        .pixel_in(pixel_data),
+        .pixel_in(display_pixel),
         .Red(VGA_R),
         .Green(VGA_G),
         .Blue(VGA_B),
