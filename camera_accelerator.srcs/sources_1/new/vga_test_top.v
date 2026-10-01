@@ -3,13 +3,16 @@
 // Minimal OV7670-to-VGA pipeline for the Nexys A7.
 // The OV7670 must output 640x480 YUV422. SW0 selects which byte pair is stored.
 // SW1 selects raw grayscale (0) or Sobel edges (1) at the next frame boundary.
-// SW15:SW12 select the Sobel threshold in increments of 25.
+// SW2 selects the FAST keypoint overlay (overrides SW1).
+// SW15:SW12 select the Sobel threshold in increments of 25, or in FAST mode
+// the FAST threshold 5..80 in increments of 5.
 module vga_test_top (
     // Internal to FPGA Dev Board
     input  wire       CLK100MHZ,
     input  wire       CPU_RESETN,
     input  wire       SW0,
     input  wire       SW1,
+    input  wire       SW2,
     input  wire       SW12,
     input  wire       SW13,
     input  wire       SW14,
@@ -102,15 +105,17 @@ module vga_test_top (
     wire [8:0] write_y;
     wire write_en;
     wire frame_done;
-    wire processing_mode;
+    wire [1:0] processing_mode;
     wire mode_changed;
     wire [10:0] active_threshold;
+    wire [15:0] frame_keypoints_bcd;
 
     runtime_pipeline_selector camera_write_pipeline (
         .pixel_in(camera_gray_pixel),
         .pixel_valid(camera_pixel_valid),
         .frame_start(camera_frame_start),
         .mode_select(SW1),
+        .fast_select(SW2),
         .threshold_select({SW15, SW14, SW13, SW12}),
         .clk(CLK100MHZ),
         .reset(reset),
@@ -121,7 +126,13 @@ module vga_test_top (
         .frame_done(frame_done),
         .active_mode(processing_mode),
         .mode_changed(mode_changed),
-        .active_threshold(active_threshold)
+        .active_threshold(active_threshold),
+        .kp_valid(),
+        .kp_x(),
+        .kp_y(),
+        .kp_score(),
+        .frame_keypoints(),
+        .frame_keypoints_bcd(frame_keypoints_bcd)
     );
 
     wire [6:0] status_segments;
@@ -129,8 +140,10 @@ module vga_test_top (
     seven_segment_status status_display (
         .clk(CLK100MHZ),
         .reset(reset),
-        .processing_mode(processing_mode),
+        .processing_mode(processing_mode != 2'd0),
         .threshold(active_threshold),
+        .show_count(processing_mode == 2'd2),
+        .count_bcd(frame_keypoints_bcd),
         .segments(status_segments),
         .decimal_point(DP),
         .anodes(AN)
@@ -168,6 +181,10 @@ module vga_test_top (
     wire read_en;
     wire [3:0] framebuffer_pixel;
     wire [3:0] display_pixel;
+    // Two 2-bit synchronizer stages. The mode only changes at a frame boundary
+    // while the display is blanked (vga_reset), so a briefly mixed value is
+    // never visible.
+    (* ASYNC_REG = "TRUE" *) reg [1:0] processing_mode_meta;
     (* ASYNC_REG = "TRUE" *) reg [1:0] processing_mode_sync;
     reg        processed_border_delayed;
 
@@ -187,16 +204,23 @@ module vga_test_top (
 
     // Synchronize the selected mode into the VGA clock domain. The border
     // decision is registered to match the framebuffer's one-clock read delay.
-    // This prevents stale raw pixels from appearing around a Sobel frame.
+    // This prevents stale raw pixels from appearing around a processed frame:
+    // Sobel never writes the 1-pixel border, FAST never writes the last 4
+    // columns and rows.
     always @(posedge vga_clk or posedge reset) begin
         if (reset) begin
+            processing_mode_meta <= 2'b00;
             processing_mode_sync <= 2'b00;
             processed_border_delayed <= 1'b0;
         end else begin
-            processing_mode_sync <= {processing_mode_sync[0], processing_mode};
-            processed_border_delayed <= processing_mode_sync[1] && read_en &&
-                                        ((read_x == 0) || (read_x == 639) ||
-                                         (read_y == 0) || (read_y == 479));
+            processing_mode_meta <= processing_mode;
+            processing_mode_sync <= processing_mode_meta;
+            processed_border_delayed <= read_en && (
+                ((processing_mode_sync == 2'd1) &&
+                 ((read_x == 0) || (read_x == 639) ||
+                  (read_y == 0) || (read_y == 479))) ||
+                ((processing_mode_sync == 2'd2) &&
+                 ((read_x >= 636) || (read_y >= 476))));
         end
     end
 

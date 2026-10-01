@@ -20,7 +20,7 @@ module runtime_pipeline_selector_tb;
     wire [8:0] y;
     wire       write_en;
     wire       frame_done;
-    wire       active_mode;
+    wire [1:0] active_mode;
     wire       mode_changed;
     wire [10:0] active_threshold;
 
@@ -44,6 +44,7 @@ module runtime_pipeline_selector_tb;
         .pixel_valid(pixel_valid),
         .frame_start(frame_start),
         .mode_select(mode_select),
+        .fast_select(1'b0),
         .threshold_select(threshold_select),
         .clk(clk),
         .reset(reset),
@@ -54,7 +55,13 @@ module runtime_pipeline_selector_tb;
         .frame_done(frame_done),
         .active_mode(active_mode),
         .mode_changed(mode_changed),
-        .active_threshold(active_threshold)
+        .active_threshold(active_threshold),
+        .kp_valid(),
+        .kp_x(),
+        .kp_y(),
+        .kp_score(),
+        .frame_keypoints(),
+        .frame_keypoints_bcd()
     );
 
     initial clk = 1'b0;
@@ -67,7 +74,7 @@ module runtime_pipeline_selector_tb;
             change_count = change_count + 1;
 
         if (write_en) begin
-            if (active_mode !== expected_mode[0]) begin
+            if (active_mode !== expected_mode[1:0]) begin
                 $display("ERROR: write used mode %0d, expected %0d",
                          active_mode, expected_mode);
                 errors = errors + 1;
