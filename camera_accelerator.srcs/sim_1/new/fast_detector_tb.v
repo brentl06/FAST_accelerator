@@ -9,7 +9,7 @@
 //   - out_gray equals the input image at (out_x, out_y)
 //   - keypoints lie inside x = 3..W-5, y = 3..H-5
 //   - fast_pipeline_top (run in parallel on the same input) writes each
-//     position once with the dimmed gray or 0xF for a keypoint, pulses
+//     position once with full-brightness gray and a separate keypoint flag, pulses
 //     frame_done on the last write, and reports the per-frame keypoint count
 //     in binary and BCD
 //
@@ -52,6 +52,7 @@ module fast_detector_tb;
     );
 
     wire [3:0]  fb_pixel;
+    wire        fb_keypoint;
     wire [9:0]  fb_x;
     wire [8:0]  fb_y;
     wire        fb_we, fb_done, kp_valid;
@@ -64,7 +65,8 @@ module fast_detector_tb;
         .clk(clk), .reset(reset),
         .pixel_in(pixel_in), .pixel_valid(pixel_valid),
         .frame_start(frame_start), .threshold(threshold),
-        .pixel_out(fb_pixel), .x(fb_x), .y(fb_y),
+        .pixel_out(fb_pixel), .keypoint_out(fb_keypoint),
+        .x(fb_x), .y(fb_y),
         .write_en(fb_we), .frame_done(fb_done),
         .kp_valid(kp_valid), .kp_x(kp_x), .kp_y(kp_y), .kp_score(kp_score),
         .frame_keypoints(frame_kps), .frame_keypoints_bcd(frame_kps_bcd)
@@ -147,12 +149,12 @@ module fast_detector_tb;
                              fb_x, fb_y, fb_ex, fb_ey);
                 errors = errors + 1;
             end
-            fb_expect = {1'b0, image[fb_y*W + fb_x][7:5]};
-            if (fb_pixel == 4'hF)
+            fb_expect = image[fb_y*W + fb_x][7:4];
+            if (fb_keypoint)
                 fb_kps = fb_kps + 1;
-            else if (fb_pixel !== fb_expect) begin
+            if (fb_pixel !== fb_expect) begin
                 if (errors < 10)
-                    $display("ERROR: framebuffer pixel %h at (%0d,%0d), expected %h or F",
+                    $display("ERROR: framebuffer pixel %h at (%0d,%0d), expected %h",
                              fb_pixel, fb_x, fb_y, fb_expect);
                 errors = errors + 1;
             end
@@ -221,7 +223,7 @@ module fast_detector_tb;
         $fclose(fd);
 
         if (fb_kps_total != kp_count || kp_stream_count != kp_count) begin
-            $display("ERROR: keypoints: detector %0d, framebuffer 0xF writes %0d, kp stream %0d",
+            $display("ERROR: keypoints: detector %0d, framebuffer markers %0d, kp stream %0d",
                      kp_count, fb_kps_total, kp_stream_count);
             errors = errors + 1;
         end

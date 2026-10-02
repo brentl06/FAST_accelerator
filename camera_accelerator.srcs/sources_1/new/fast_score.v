@@ -32,12 +32,12 @@ module fast_score #(
 
     localparam LAT = 8;
 
-    function [7:0] min8;
+    function automatic [7:0] min8;
         input [7:0] a, b;
         min8 = (a < b) ? a : b;
     endfunction
 
-    function [7:0] max8;
+    function automatic [7:0] max8;
         input [7:0] a, b;
         max8 = (a > b) ? a : b;
     endfunction
@@ -83,7 +83,22 @@ module fast_score #(
     reg [TAG_W+8-1:0]   side_pipe [0:LAT-1];
     wire [7:0]          thr_at_end = side_pipe[LAT-2][7:0];
 
-    integer k, p;
+    // Explicit reduction tree keeps function calls unnested and all array
+    // indices constant, including in XSim's Verilog elaborator.
+    wire [7:0] arc_pair [0:15];
+    genvar pair_index;
+    generate for (pair_index=0; pair_index<16; pair_index=pair_index+1) begin: arc_pairs
+        assign arc_pair[pair_index] = (m9[2*pair_index] > m9[2*pair_index+1]) ?
+                                     m9[2*pair_index] : m9[2*pair_index+1];
+    end endgenerate
+    wire [7:0] r01 = max8(r4[0],r4[1]);
+    wire [7:0] r23 = max8(r4[2],r4[3]);
+    wire [7:0] r45 = max8(r4[4],r4[5]);
+    wire [7:0] r67 = max8(r4[6],r4[7]);
+
+    // Independent procedural indices avoid simulation races between the
+    // arithmetic and metadata always blocks.
+    integer k, p, side_k;
     always @(posedge clk) begin
         for (k = 0; k < 16; k = k + 1) begin
             d[k]      <= (ring[k] > center) ? ring[k] - center : 8'd0;
@@ -99,10 +114,10 @@ module fast_score #(
             end
 
         for (k = 0; k < 8; k = k + 1)
-            r4[k] <= max8(max8(m9[4*k], m9[4*k + 1]), max8(m9[4*k + 2], m9[4*k + 3]));
+            r4[k] <= max8(arc_pair[2*k],arc_pair[2*k+1]);
 
-        s_b <= max8(max8(r4[0], r4[1]), max8(r4[2], r4[3]));
-        s_d <= max8(max8(r4[4], r4[5]), max8(r4[6], r4[7]));
+        s_b <= max8(r01,r23);
+        s_d <= max8(r45,r67);
 
         // Stage 8: threshold here uses the value that entered with this window.
         out_score <= (max8(s_b, s_d) > thr_at_end) ? max8(s_b, s_d) : 8'd0;
@@ -110,8 +125,8 @@ module fast_score #(
 
     always @(posedge clk) begin
         side_pipe[0] <= {in_tag, threshold};
-        for (k = 1; k < LAT; k = k + 1)
-            side_pipe[k] <= side_pipe[k-1];
+        for (side_k = 1; side_k < LAT; side_k = side_k + 1)
+            side_pipe[side_k] <= side_pipe[side_k-1];
 
         if (reset)
             valid_pipe <= 0;

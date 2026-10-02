@@ -101,6 +101,7 @@ module vga_test_top (
 
     // Convert the valid pixel stream into framebuffer writes.
     wire [3:0] write_data;
+    wire write_is_keypoint;
     wire [9:0] write_x;
     wire [8:0] write_y;
     wire write_en;
@@ -109,6 +110,10 @@ module vga_test_top (
     wire mode_changed;
     wire [10:0] active_threshold;
     wire [15:0] frame_keypoints_bcd;
+    wire fast_kp_valid, fast_kp_frame_done;
+    wire [9:0] fast_kp_x;
+    wire [8:0] fast_kp_y;
+    wire [7:0] fast_kp_score;
 
     runtime_pipeline_selector camera_write_pipeline (
         .pixel_in(camera_gray_pixel),
@@ -120,6 +125,7 @@ module vga_test_top (
         .clk(CLK100MHZ),
         .reset(reset),
         .pixel_out(write_data),
+        .pixel_is_keypoint(write_is_keypoint),
         .x(write_x),
         .y(write_y),
         .write_en(write_en),
@@ -127,15 +133,64 @@ module vga_test_top (
         .active_mode(processing_mode),
         .mode_changed(mode_changed),
         .active_threshold(active_threshold),
-        .kp_valid(),
-        .kp_x(),
-        .kp_y(),
-        .kp_score(),
+        .kp_valid(fast_kp_valid),
+        .kp_frame_done(fast_kp_frame_done),
+        .kp_x(fast_kp_x),
+        .kp_y(fast_kp_y),
+        .kp_score(fast_kp_score),
         .frame_keypoints(),
         .frame_keypoints_bcd(frame_keypoints_bcd)
     );
 
     wire [6:0] status_segments;
+    wire status_decimal_point;
+
+    // Share the existing continuously running FAST branch. ORB owns two raw
+    // 4-bit banks; the display keeps its independent processed 5-bit buffer.
+    // A digest consumes every descriptor bit in this hardware bring-up build.
+    // MARK_DEBUG preserves useful endpoints for subsequent JTAG/ILA probing;
+    // host transport and matching are separate from descriptor extraction.
+    (* MARK_DEBUG="TRUE" *) wire orb_valid, orb_frame_done;
+    (* MARK_DEBUG="TRUE" *) wire [255:0] orb_bits;
+    wire [4:0] orb_angle;
+    wire [9:0] orb_x;
+    wire [8:0] orb_y;
+    wire [7:0] orb_score;
+    (* MARK_DEBUG="TRUE" *) wire [31:0] orb_frame_id;
+    (* MARK_DEBUG="TRUE" *) wire [63:0] orb_timestamp;
+    (* MARK_DEBUG="TRUE" *) wire [15:0] orb_feature_count;
+    (* MARK_DEBUG="TRUE" *) wire [31:0] orb_dropped_frames, orb_aborted_frames;
+    (* MARK_DEBUG="TRUE" *) reg [31:0] orb_digest;
+    reg orb_frame_toggle;
+    orb_accelerator #(.EXTERNAL_FAST(1)) orb (
+        .clk(CLK100MHZ), .reset(reset), .pixel_in(camera_gray_pixel),
+        .pixel_valid(camera_pixel_valid), .frame_start(camera_frame_start),
+        .fast_threshold(8'd0), // shared FAST threshold is owned by the selector
+        .external_kp_valid(fast_kp_valid), .external_fast_done(fast_kp_frame_done),
+        .external_kp_x(fast_kp_x), .external_kp_y(fast_kp_y), .external_kp_score(fast_kp_score),
+        .frame_ready(), .frame_dropped(), .dropped_frames(orb_dropped_frames),
+        .aborted_frames(orb_aborted_frames), .descriptor_valid(orb_valid),
+        .descriptor_ready(1'b1), .descriptor(orb_bits), .angle_bin(orb_angle),
+        .feature_x(orb_x), .feature_y(orb_y), .feature_score(orb_score),
+        .feature_frame_id(orb_frame_id), .feature_timestamp(orb_timestamp),
+        .frame_done(orb_frame_done), .frame_feature_count(orb_feature_count),
+        .completed_frame_valid(), .completed_frame_bank());
+    always @(posedge CLK100MHZ) begin
+        if (reset) begin orb_digest <= 0; orb_frame_toggle <= 0; end
+        else begin
+            if (orb_valid)
+                orb_digest <= {orb_digest[30:0],orb_digest[31]} ^
+                    orb_bits[31:0] ^ orb_bits[63:32] ^ orb_bits[95:64] ^ orb_bits[127:96] ^
+                    orb_bits[159:128] ^ orb_bits[191:160] ^ orb_bits[223:192] ^ orb_bits[255:224] ^
+                    {orb_x,orb_y,orb_score,orb_angle} ^ orb_frame_id ^
+                    orb_timestamp[31:0] ^ orb_timestamp[63:32];
+            if (orb_frame_done) orb_frame_toggle <= ~orb_frame_toggle;
+        end
+    end
+    // Decimal point provides a visible descriptor-processing activity signal.
+    // Folding the digest into it also gives the descriptor datapath a real
+    // board output, preventing synthesis from pruning an unconsumed engine.
+    assign DP = status_decimal_point && !(orb_frame_toggle && orb_digest[0]);
 
     seven_segment_status status_display (
         .clk(CLK100MHZ),
@@ -145,7 +200,7 @@ module vga_test_top (
         .show_count(processing_mode == 2'd2),
         .count_bcd(frame_keypoints_bcd),
         .segments(status_segments),
-        .decimal_point(DP),
+        .decimal_point(status_decimal_point),
         .anodes(AN)
     );
 
@@ -187,8 +242,9 @@ module vga_test_top (
     wire [9:0] read_x;
     wire [8:0] read_y;
     wire read_en;
-    wire [3:0] framebuffer_pixel;
+    wire [4:0] framebuffer_pixel;
     wire [3:0] display_pixel;
+    wire display_red_overlay;
     // Two 2-bit synchronizer stages. The mode only changes at a frame boundary
     // while the display is blanked (vga_reset), so a briefly mixed value is
     // never visible.
@@ -196,12 +252,18 @@ module vga_test_top (
     (* ASYNC_REG = "TRUE" *) reg [1:0] processing_mode_sync;
     reg        processed_border_delayed;
 
-    frame_buffer framebuffer (
+    frame_buffer #(.DATA_WIDTH(5)) framebuffer (
         .write_clk(CLK100MHZ),
         .write_x(write_x),
         .write_y(write_y),
-        .data_in(write_data),
+        .data_in({write_is_keypoint, write_data}),
         .write_en(write_en),
+        .sys_read_x(10'd0),
+        .sys_read_y(9'd0),
+        .sys_read_en(1'b0),
+        .sys_data_out(),
+        .sys_read_valid(),
+        .sys_read_ready(),
         .read_clk(vga_clk),
         .read_x(read_x),
         .read_y(read_y),
@@ -232,12 +294,14 @@ module vga_test_top (
         end
     end
 
-    assign display_pixel = processed_border_delayed ? 4'h0 : framebuffer_pixel;
+    assign display_pixel = processed_border_delayed ? 4'h0 : framebuffer_pixel[3:0];
+    assign display_red_overlay = !processed_border_delayed && framebuffer_pixel[4];
 
     vga_driver driver (
         .vga_clk(vga_clk),
         .reset(vga_reset),
         .pixel_in(display_pixel),
+        .red_overlay(display_red_overlay),
         .Red(VGA_R),
         .Green(VGA_G),
         .Blue(VGA_B),

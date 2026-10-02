@@ -16,6 +16,7 @@ module runtime_pipeline_selector_tb;
     reg  [3:0] threshold_select;
 
     wire [3:0] pixel_out;
+    wire       pixel_is_keypoint;
     wire [9:0] x;
     wire [8:0] y;
     wire       write_en;
@@ -49,6 +50,7 @@ module runtime_pipeline_selector_tb;
         .clk(clk),
         .reset(reset),
         .pixel_out(pixel_out),
+        .pixel_is_keypoint(pixel_is_keypoint),
         .x(x),
         .y(y),
         .write_en(write_en),
@@ -74,6 +76,11 @@ module runtime_pipeline_selector_tb;
             change_count = change_count + 1;
 
         if (write_en) begin
+            if (pixel_is_keypoint !== 1'b0) begin
+                $display("ERROR: keypoint marker asserted outside FAST mode");
+                errors = errors + 1;
+            end
+
             if (active_mode !== expected_mode[1:0]) begin
                 $display("ERROR: write used mode %0d, expected %0d",
                          active_mode, expected_mode);

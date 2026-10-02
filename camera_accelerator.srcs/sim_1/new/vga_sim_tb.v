@@ -20,16 +20,17 @@ module vga_driver_tb;
     reg vga_reset;
     reg [9:0] write_x;
     reg [8:0] write_y;
-    reg [3:0] write_data;
+    reg [4:0] write_data;
     reg write_en;
 
     wire [9:0] read_x;
     wire [8:0] read_y;
     wire read_en;
-    wire [3:0] pixel_data;
+    wire [4:0] pixel_data;
     wire [3:0] red;
     wire [3:0] green;
     wire [3:0] blue;
+    wire red_overlay = pixel_data[4];
     wire hsync;
     wire vsync;
 
@@ -54,12 +55,18 @@ module vga_driver_tb;
         end
     endfunction
 
-    frame_buffer framebuffer (
+    frame_buffer #(.DATA_WIDTH(5)) framebuffer (
         .write_clk(write_clk),
         .write_x(write_x),
         .write_y(write_y),
         .data_in(write_data),
         .write_en(write_en),
+        .sys_read_x(10'd0),
+        .sys_read_y(9'd0),
+        .sys_read_en(1'b0),
+        .sys_data_out(),
+        .sys_read_valid(),
+        .sys_read_ready(),
         .read_clk(vga_clk),
         .read_x(read_x),
         .read_y(read_y),
@@ -71,7 +78,8 @@ module vga_driver_tb;
     vga_driver driver (
         .vga_clk(vga_clk),
         .reset(vga_reset),
-        .pixel_in(pixel_data),
+        .pixel_in(pixel_data[3:0]),
+        .red_overlay(red_overlay),
         .Red(red),
         .Green(green),
         .Blue(blue),
@@ -115,7 +123,7 @@ module vga_driver_tb;
                 @(negedge write_clk);
                 write_x = x;
                 write_y = y;
-                write_data = test_pattern(x, y);
+                write_data = {(test_pattern(x, y) == 4'hA), test_pattern(x, y)};
                 write_en = 1;
             end
         end
@@ -125,7 +133,7 @@ module vga_driver_tb;
         // An invalid write must not alias address zero.
         write_x = H_VISIBLE;
         write_y = 0;
-        write_data = 4'hf;
+        write_data = 5'h1f;
         write_en = 1;
         @(negedge write_clk);
         write_en = 0;
@@ -165,10 +173,14 @@ module vga_driver_tb;
                 record_error("incorrect hsync");
             if (vsync !== expected_vsync)
                 record_error("incorrect vsync");
-            if ((red !== expected_pixel) ||
-                (green !== expected_pixel) ||
-                (blue !== expected_pixel))
-                record_error("incorrect RGB pixel");
+            if (expected_pixel == 4'hA) begin
+                if ((red !== 4'hF) || (green !== 4'h4) || (blue !== 4'h4))
+                    record_error("incorrect red overlay pixel");
+            end else if ((red !== expected_pixel) ||
+                         (green !== expected_pixel) ||
+                         (blue !== expected_pixel)) begin
+                record_error("incorrect grayscale RGB pixel");
+            end
 
             if (model_h == H_TOTAL-1) begin
                 model_h = 0;

@@ -21,7 +21,7 @@
 
 
 module vga_driver(
-         vga_clk, reset, pixel_in,
+         vga_clk, reset, pixel_in, red_overlay,
          Red, Green, Blue, hsync, vsync,
          rd_addr_x, rd_addr_y, read_en
     );
@@ -29,6 +29,7 @@ module vga_driver(
     // IN n OUTs
     input vga_clk, reset;
     input [3:0] pixel_in;
+    input red_overlay;
     
     output [3:0] Red, Green, Blue;
     output hsync, vsync;
@@ -106,9 +107,11 @@ module vga_driver(
     
     
     // Final assignments 
-    assign Red = active_video_delayed ? pixel_int : 0;
-    assign Green = active_video_delayed ? pixel_int : 0;
-    assign Blue = active_video_delayed ? pixel_int : 0;
+    // A little green and blue raises the marker's luminance while preserving
+    // a clearly red hue. Pure F00 is saturated but appears relatively dark.
+    assign Red = active_video_delayed ? (red_overlay ? 4'hF : pixel_int) : 0;
+    assign Green = active_video_delayed ? (red_overlay ? 4'h4 : pixel_int) : 0;
+    assign Blue = active_video_delayed ? (red_overlay ? 4'h4 : pixel_int) : 0;
     
     assign pixel_int = active_video_delayed ? pixel_in : 0;
     

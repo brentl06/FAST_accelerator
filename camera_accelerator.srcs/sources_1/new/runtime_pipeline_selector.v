@@ -19,6 +19,7 @@ module runtime_pipeline_selector #(
     input  wire       reset,
 
     output wire [3:0] pixel_out,
+    output wire       pixel_is_keypoint,
     output wire [9:0] x,
     output wire [8:0] y,
     output wire       write_en,
@@ -29,6 +30,7 @@ module runtime_pipeline_selector #(
 
     // FAST keypoint stream (valid in every mode) and per-frame counts
     output wire       kp_valid,
+    output wire       kp_frame_done,
     output wire [9:0] kp_x,
     output wire [8:0] kp_y,
     output wire [7:0] kp_score,
@@ -60,6 +62,7 @@ module runtime_pipeline_selector #(
     wire       edge_frame_done;
 
     wire [3:0] fast_pixel_out;
+    wire       fast_keypoint_out;
     wire [9:0] fast_x;
     wire [8:0] fast_y;
     wire       fast_write_en;
@@ -174,6 +177,7 @@ module runtime_pipeline_selector #(
         .threshold(frame_start ? fast_threshold_from_switches(threshold_select_sync)
                                : fast_threshold),
         .pixel_out(fast_pixel_out),
+        .keypoint_out(fast_keypoint_out),
         .x(fast_x),
         .y(fast_y),
         .write_en(fast_write_en),
@@ -190,6 +194,8 @@ module runtime_pipeline_selector #(
     // branches continue running so each is aligned and ready next frame.
     assign pixel_out  = (active_mode == MODE_FAST)  ? fast_pixel_out :
                         (active_mode == MODE_SOBEL) ? edge_pixel_out : raw_pixel_out;
+    assign pixel_is_keypoint = (active_mode == MODE_FAST) && fast_keypoint_out;
+    assign kp_frame_done = fast_frame_done;
     assign x          = (active_mode == MODE_FAST)  ? fast_x :
                         (active_mode == MODE_SOBEL) ? edge_x : raw_x;
     assign y          = (active_mode == MODE_FAST)  ? fast_y :

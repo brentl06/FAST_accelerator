@@ -1,0 +1,3 @@
+# Reproducible simulation products; keep this local ignore file only.
+*
+!.gitignore

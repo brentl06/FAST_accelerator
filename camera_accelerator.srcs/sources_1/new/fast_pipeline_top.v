@@ -2,8 +2,8 @@
 
 // FAST detector with framebuffer-ready outputs (same write interface as
 // processing_pipeline_top). Each position is written once per frame: the
-// grayscale image dimmed to half brightness, with keypoints at full white so
-// they stand out. Positions x = 0..W-5, y = 0..H-5 are written; the last four
+// full-brightness grayscale image plus a separate keypoint marker. Positions
+// x = 0..W-5, y = 0..H-5 are written; the last four
 // columns and rows are left for the display path to blank.
 //
 // kp_* is the raw keypoint stream for downstream ORB stages. frame_keypoints
@@ -21,6 +21,7 @@ module fast_pipeline_top #(
     input  wire [7:0]  threshold,
 
     output reg  [3:0]  pixel_out,
+    output reg         keypoint_out,
     output reg  [9:0]  x,
     output reg  [8:0]  y,
     output reg         write_en,
@@ -74,6 +75,7 @@ module fast_pipeline_top #(
     always @(posedge clk) begin
         if (reset) begin
             pixel_out        <= 4'h0;
+            keypoint_out     <= 1'b0;
             x                <= 10'd0;
             y                <= 9'd0;
             write_en         <= 1'b0;
@@ -85,9 +87,11 @@ module fast_pipeline_top #(
         end else begin
             write_en   <= 1'b0;
             frame_done <= 1'b0;
+            keypoint_out <= 1'b0;
 
             if (det_valid && det_inside) begin
-                pixel_out <= det_keypoint ? 4'hF : {1'b0, det_gray[7:5]};
+                pixel_out    <= det_gray[7:4];
+                keypoint_out <= det_keypoint;
                 x         <= det_x;
                 y         <= det_y;
                 write_en  <= 1'b1;
