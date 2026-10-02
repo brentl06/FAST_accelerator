@@ -143,15 +143,16 @@ python3 tools/fast_check.py           # adds 640x480
 ## ORB Verification and Build
 
 ```powershell
-./tools/run_orb_tests.ps1
 & 'C:\Xilinx\Vivado\2024.1\bin\vivado.bat' -mode batch -source tools/build_orb_board.tcl -tclargs (Get-Location).Path
 ```
 
-The test runner requires Python and Vivado/XSim (Vivado 2024.1 by default).
-Tests cover descriptor reference vectors, all orientation bins, grid selection,
-patch reads, output stalls, frame skipping/recovery, shared FAST integration,
-and concurrent framebuffer reads/writes including full VGA-sized readback.
-The existing VGA grayscale/red-overlay regression also passed.
+ORB verification tools and generated test/build folders are kept local and
+excluded from this source-focused checkout. They can be recovered from commit
+`e6f600d` if needed. Before cleanup, the Vivado/XSim tests passed descriptor
+reference vectors, all orientation bins, grid selection, patch reads, output
+stalls, frame skipping/recovery, shared FAST integration, and concurrent
+framebuffer reads/writes including full VGA-sized readback. The existing VGA
+grayscale/red-overlay regression also passed.
 
 The isolated build writes reports and a bitstream under
 `orb_test_output/board_<timestamp>/` without programming the FPGA. Currently

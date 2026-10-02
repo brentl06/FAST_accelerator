@@ -84,15 +84,13 @@ stalls, one feature takes roughly 21,500 system clocks; at a target 100 MHz,
 
 ## Verification and reports
 
-Run from the repository root:
+ORB testbenches, reference tools, probe scripts and generated output are kept
+local and excluded from the source-focused checkout. The verification sources
+can be recovered from commit `e6f600d`. The following describes the completed
+verification; it is not a runnable test suite in a fresh checkout.
 
-```powershell
-./tools/run_orb_tests.ps1
-& 'C:\Xilinx\Vivado\2024.1\bin\vivado.bat' -mode batch -source bram_tests/run_orb_accelerator_probe.tcl
-```
-
-The tests generate numerical vectors in `orb_test_output`, which is ignored
-except for its local `.gitignore`. The pure-Python reference computes FAST/NMS,
+The tests generated numerical vectors in the ignored `orb_test_output` folder.
+The pure-Python reference computes FAST/NMS,
 selection, moments, smoothing and descriptors independently of the HDL; only
 the published sampling constants are shared. Coverage includes 40 patches
 (all 32 angle bins, uniform pixels and random texture), all 256 output bits,
