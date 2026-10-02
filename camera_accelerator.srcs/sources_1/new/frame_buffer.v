@@ -52,6 +52,9 @@ module frame_buffer#(
     wire [18:0] wr_addr;
     wire valid_rd_addr;
     wire valid_wr_addr;
+    reg [18:0] wr_addr_q;
+    reg [3:0]  wr_data_q;
+    reg        wr_en_q;
     
     (* ram_style = "block" *)
     reg [3:0] memory [0:FRAME_SIZE-1];
@@ -84,11 +87,26 @@ module frame_buffer#(
         end
     end
     
-    // Writing Logic
+    // Pipeline the complete write request before it reaches the framebuffer.
+    // This separates the y * FRAME_WIDTH + x address calculation from the
+    // BRAM bank decode and write-enable path while preserving one write per
+    // clock throughput.
     always @(posedge write_clk)
     begin: WRITE_PROCESS
-        if (write_en & valid_wr_addr & !reset) begin 
-            memory[wr_addr] <= data_in;
+        if (reset) begin
+            wr_addr_q <= 19'd0;
+            wr_data_q <= 4'd0;
+            wr_en_q   <= 1'b0;
+        end else begin
+            wr_en_q <= write_en & valid_wr_addr;
+
+            if (write_en & valid_wr_addr) begin
+                wr_addr_q <= wr_addr;
+                wr_data_q <= data_in;
+            end
+
+            if (wr_en_q)
+                memory[wr_addr_q] <= wr_data_q;
         end
     end
     

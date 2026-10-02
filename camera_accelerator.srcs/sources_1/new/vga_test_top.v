@@ -152,15 +152,23 @@ module vga_test_top (
     assign {CA, CB, CC, CD, CE, CF, CG} = status_segments;
 
     // Keep VGA blanked until one complete frame from the selected mode has
-    // been stored. A mode change invalidates the frame currently on display.
+    // been stored. The framebuffer pipelines writes by one system clock, so
+    // delay frame_done by the same amount before declaring the frame complete.
+    // A mode change invalidates the frame currently on display.
     reg first_frame_complete;
+    reg frame_done_delayed;
     always @(posedge CLK100MHZ or posedge reset) begin
-        if (reset)
+        if (reset) begin
             first_frame_complete <= 0;
-        else if (mode_changed)
-            first_frame_complete <= 0;
-        else if (frame_done)
-            first_frame_complete <= 1;
+            frame_done_delayed    <= 0;
+        end else begin
+            frame_done_delayed <= frame_done;
+
+            if (mode_changed)
+                first_frame_complete <= 0;
+            else if (frame_done_delayed)
+                first_frame_complete <= 1;
+        end
     end
 
     (* ASYNC_REG = "TRUE" *) reg [1:0] frame_complete_sync;

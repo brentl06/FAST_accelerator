@@ -16,7 +16,7 @@
 // is the newest input pixel. When col < N-1 or row < N-1 the window holds
 // wrapped or previous-frame data; validity is the caller's decision.
 module line_window #(
-    parameter N      = 3,     // window size, >= 3
+    parameter N      = 5,     // window size, >= 3
     parameter LINE_W = 640,   // pixels per image row
     parameter DATA_W = 8,
     parameter TAG_W  = 1
